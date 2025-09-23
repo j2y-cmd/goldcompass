@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>1oz 금시세 ($/oz)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+		.error { color: #c62828; }
+		/* 표 전체 셀 우측 정렬 (표 헤더/값을 깔끔하게 보기 위함) */
+		table td { text-align: right }
+    </style>
+</head>
+<body>
+    <div>
+		<!-- 표시 테이블: 각 행은 서로 다른 지표를 의미 -->
+		<table>
+			<tr>
+				<td>$/oz</td>
+				<td id="usd-oz">로딩 중...</td>
+			</tr>
+			<tr>
+				<td>$/g</td>
+				<td id="usd-gram">로딩 중...</td>
+			</tr>
+			<tr>
+				<!-- 환율 표기(원/달러) -->
+				<td>₩/$</td>
+				<td id="krw-per-usd">로딩 중...</td>
+			</tr>
+			<tr>
+				<!-- 국제 금 1g 가격(원화 환산) -->
+				<td>₩/g</td>
+				<td id="krw-per-gram">로딩 중...</td>
+			</tr>
+			<tr>
+				<!-- KRX 프리미엄(원화 절대값): KRX 원/g − 국제 원/g -->
+				<td>KRX</td>
+				<td id="krx-per-krw">로딩 중...</td>
+			</tr>
+			<tr>
+				<!-- 거품 비율(%): (KRX − 국제) / 국제 × 100 -->
+				<td>ratio</td>
+				<td id="krx-bubble">로딩 중...</td>
+			</tr>
+			<tr>
+				<!-- 데이터 최종 갱신 시각 -->
+				<td colspan="2" style="text-align: center;" id="updated-at">-</td>
+			</tr>
+		</table>
+		<div>
+			<button id="refresh">새로고침</button>
+        </div>
+		<!-- 실제 사용된 데이터 소스 명시 -->
+		<div id="source">소스: 자동 감지</div>
+    </div>
+
+    <script>
+		// 공개(무키) 소스 우선 순위
+		// 금: goldprice.org → metals.live → AllOrigins 프록시
+		// 환율: open.er-api.com → frankfurter.app → exchangerate.host → AllOrigins 프록시 → 고정값
+
+        document.addEventListener('DOMContentLoaded', () => {
+			// DOM 요소 참조
+			const elUsdOz = document.getElementById('usd-oz');
+			const elUsdGram = document.getElementById('usd-gram');
+			const elKrwPerUsd = document.getElementById('krw-per-usd');
+			const elKrwPerGram = document.getElementById('krw-per-gram');
+			const elKrxPerKrw = document.getElementById('krx-per-krw');
+			const elKrxBubble = document.getElementById('krx-bubble');
+			const elUpdated = document.getElementById('updated-at');
+			const elSource = document.getElementById('source');
+			const btn = document.getElementById('refresh');
+
+			// KRX 프리미엄 가정치(부가세+수수료 등) 11.5%
+			const krxPremiumRate = 0.115;
+
+			btn.addEventListener('click', () => load());
+			load();
+
+			// 메인 로드 함수: 금/환율을 병렬로 불러와 계산 후 표에 반영
+			async function load() {
+				setLoading();
+				try {
+					// 1) $/oz, 2) KRW/USD 동시 조회
+					const [{ price, source, updatedAt }, fx] = await Promise.all([
+						fetchGoldOzUSD(),
+						fetchKrwPerUsd()
+					]);
+
+					// 온스→그램 환산: 1 oz = 31.1035 g
+					elUsdOz.textContent = `$${formatNumber(price, 2)}`;
+					const perGramUSD = price / 31.1035;
+					elUsdGram.textContent = `$${formatNumber(perGramUSD, 4)}`;
+
+					// 원화 환산 및 표기
+					elKrwPerUsd.textContent = `₩${formatNumber(fx.rate, 2)}`;
+					const perGramKRW = perGramUSD * fx.rate;
+					elKrwPerGram.textContent = `₩${formatNumber(perGramKRW, 0)}`;
+
+					// KRX 원/g(가정): 국제 원/g에 프리미엄 11.5% 적용
+					const krxPerGram = perGramKRW * (1 + krxPremiumRate);
+					// 프리미엄(원): KRX − 국제
+					const premiumAbsKRW = 175300;//krxPerGram - perGramKRW;
+					// 프리미엄(%): (KRX − 국제) / 국제 × 100
+					const premiumPct = (premiumAbsKRW / perGramKRW) * 100 - 100;
+					elKrxPerKrw.textContent = `₩${formatNumber(premiumAbsKRW, 0)}`;
+					elKrxBubble.textContent = `${formatNumber(premiumPct, 2)}%`;
+
+					// 메타 정보 표기
+					elUpdated.textContent = `${updatedAt ? new Date(updatedAt).toLocaleString() : '알 수 없음'}`;
+					elSource.textContent = `소스: ${source} + ${fx.source}`;
+				} catch (err) {
+					// 오류 시 간단 표기
+					elUsdOz.textContent = '표시 오류';
+					elUsdOz.classList.add('error');
+					elUsdGram.textContent = '표시 오류';
+					elKrwPerUsd.textContent = '표시 오류';
+					elKrwPerGram.textContent = '표시 오류';
+					elKrxPerKrw.textContent = '표시 오류';
+					elKrxBubble.textContent = '표시 오류';
+					elUpdated.textContent = '-';
+					elSource.textContent = `소스: 오류 (${err?.message || err})`;
+				}
+			}
+
+			// 로딩 상태 초기화
+			function setLoading() {
+				elUsdOz.classList.remove('error');
+				elUsdOz.textContent = '로딩 중...';
+				elUsdGram.textContent = '로딩 중...';
+				elKrwPerUsd.textContent = '로딩 중...';
+				elKrwPerGram.textContent = '로딩 중...';
+				elKrxPerKrw.textContent = '로딩 중...';
+				elKrxBubble.textContent = '로딩 중...';
+				elUpdated.textContent = '-';
+				elSource.textContent = '소스: 자동 감지';
+			}
+
+			// 숫자 서식 함수(소수점 자리수 제한)
+			function formatNumber(n, maxFrac) {
+				return Number(n).toLocaleString(undefined, { maximumFractionDigits: maxFrac });
+			}
+
+			// 금 시세 $/oz 조회(무키): goldprice.org → metals.live → 프록시 → 폴백
+			async function fetchGoldOzUSD() {
+				// 시도 1: GoldPrice
+				try {
+					const url = 'https://data-asg.goldprice.org/dbXRates/USD';
+					const data = await fetchJson(url);
+					// 예상 구조: { items: [ { xauPrice: number, ts: number, ... } ] }
+					const items = data?.items || data?.Items || [];
+					const first = Array.isArray(items) ? items[0] : null;
+					const xau = first?.xauPrice || first?.xau || first?.xauUsd;
+					if (isFinite(xau)) {
+						return { price: Number(xau), source: 'goldprice.org', updatedAt: first?.ts || first?.tsj || Date.now() };
+					}
+					// CORS/구조 이슈 → 프록시
+					const proxied = await fetchJson('https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
+					const pItems = proxied?.items || proxied?.Items || [];
+					const pFirst = Array.isArray(pItems) ? pItems[0] : null;
+					const pXau = pFirst?.xauPrice || pFirst?.xau || pFirst?.xauUsd;
+					if (isFinite(pXau)) {
+						return { price: Number(pXau), source: 'goldprice.org (via AllOrigins)', updatedAt: pFirst?.ts || pFirst?.tsj || Date.now() };
+					}
+				} catch (_) { /* 다음 소스 */ }
+
+				// 시도 2: metals.live
+				try {
+					const url2 = 'https://api.metals.live/v1/spot/gold';
+					const data2 = await fetchJson(url2);
+					// 가능한 형식 1: [ { gold: 2400.12 }, ... ]
+					// 가능한 형식 2: [ [timestamp, 2400.12], ... ]
+					let price;
+					if (Array.isArray(data2) && data2.length > 0) {
+						const last = data2[data2.length - 1];
+						if (typeof last === 'object' && !Array.isArray(last)) {
+							price = last.gold || last.XAU || last.price;
+						} else if (Array.isArray(last)) {
+							price = last[1];
+						}
+					}
+					if (isFinite(price)) {
+						return { price: Number(price), source: 'metals.live', updatedAt: Date.now() };
+					}
+					// CORS 차단 시 프록시 사용
+					const proxied2 = await fetchJson('https://api.allorigins.win/raw?url=' + encodeURIComponent(url2));
+					let price2;
+					if (Array.isArray(proxied2) && proxied2.length > 0) {
+						const last2 = proxied2[proxied2.length - 1];
+						if (typeof last2 === 'object' && !Array.isArray(last2)) {
+							price2 = last2.gold || last2.XAU || last2.price;
+						} else if (Array.isArray(last2)) {
+							price2 = last2[1];
+						}
+					}
+					if (isFinite(price2)) {
+						return { price: Number(price2), source: 'metals.live (via AllOrigins)', updatedAt: Date.now() };
+					}
+				} catch (_) { /* 다음 단계 */ }
+
+				// 최종 폴백: 고정 예시값
+				return { price: 2400, source: 'fallback', updatedAt: Date.now() };
+			}
+
+			// 환율 KRW/USD 조회(무키): er-api → frankfurter → exchangerate.host → 프록시 → 고정값
+			async function fetchKrwPerUsd() {
+				// 시도 1
+				try {
+					const url = 'https://open.er-api.com/v6/latest/USD';
+					const data = await fetchJson(url);
+					const rate = data?.rates?.KRW;
+					if (isFinite(rate)) return { rate: Number(rate), source: 'open.er-api.com' };
+				} catch (_) { /* 다음 소스 */ }
+
+				// 시도 2
+				try {
+					const url = 'https://api.frankfurter.app/latest?from=USD&to=KRW';
+					const data = await fetchJson(url);
+					const rate = data?.rates?.KRW;
+					if (isFinite(rate)) return { rate: Number(rate), source: 'frankfurter.app' };
+				} catch (_) { /* 다음 소스 */ }
+
+				// 시도 3
+				try {
+					const url = 'https://api.exchangerate.host/latest?base=USD&symbols=KRW';
+					const data = await fetchJson(url);
+					const rate = data?.rates?.KRW;
+					if (isFinite(rate)) return { rate: Number(rate), source: 'exchangerate.host' };
+					// 프록시 재시도
+					const proxiedText = await fetchText('https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
+					try {
+						const proxied = JSON.parse(proxiedText);
+						const pRate = proxied?.rates?.KRW;
+						if (isFinite(pRate)) return { rate: Number(pRate), source: 'exchangerate.host (via AllOrigins)' };
+					} catch (_) { /* JSON 파싱 실패 */ }
+				} catch (_) { /* 폴백 */ }
+
+				// 최종 폴백: 고정 예시 환율
+				return { rate: 1400, source: 'fallback' };
+			}
+
+			// 공통 fetch(JSON)
+			async function fetchJson(url) {
+				const res = await fetch(url);
+				if (!res.ok) throw new Error('HTTP ' + res.status);
+				return await res.json();
+			}
+
+			// 공통 fetch(Text)
+			async function fetchText(url) {
+				const res = await fetch(url);
+				if (!res.ok) throw new Error('HTTP ' + res.status);
+				return await res.text();
+			}
+		});
+    </script>
+</body>
+</html>
