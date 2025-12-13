@@ -17,35 +17,43 @@
         }
 		.error { color: #c62828; }
 		/* 표 전체 셀 우측 정렬 (표 헤더/값을 깔끔하게 보기 위함) */
-		table td { text-align: right }
+		table td {
+			text-align: right;
+		}
+
+		table td:nth-child(2) {
+			text-align: left;
+		}
     </style>
 </head>
 <body>
     <div>
 		<!-- 표시 테이블: 각 행은 서로 다른 지표를 의미 -->
 		<table>
-			<tr>
-				<td>$/oz</td>
+			<tr>				
 				<td id="usd-oz">로딩 중...</td>
+				<td>/oz</td>
 			</tr>
-			<tr>
-				<td>$/g</td>
+			<tr>				
 				<td id="usd-gram">로딩 중...</td>
+				<td>/g</td>
 			</tr>
 			<tr>
-				<!-- 환율 표기(원/달러) -->
-				<td>₩/$</td>
+				<!-- 환율 표기(원/달러) -->				
 				<td id="krw-per-usd">로딩 중...</td>
+				<td>/$</td>
 			</tr>
 			<tr>
-				<!-- 국제 금 1g 가격(원화 환산) -->
-				<td>₩/g</td>
+				<!-- 국제 금 1g 가격(원화 환산) -->				
 				<td id="krw-per-gram">로딩 중...</td>
+				<td>/g</td>
 			</tr>
 			<tr>
-				<!-- KRX 프리미엄(원화 절대값): KRX 원/g − 국제 원/g -->
-				<td>KRX</td>
-				<td id="krx-per-krw">로딩 중...</td>
+				<!-- KRX 프리미엄(원화 절대값): KRX 원/g − 국제 원/g -->				
+				<td>
+					<input type="number" id="krx-per-krw" style="text-align: right;" />
+				</td>
+				<td>/g KRX</td>
 			</tr>
 			<tr>
 				<!-- 거품 비율(%): (KRX − 국제) / 국제 × 100 -->
@@ -99,7 +107,7 @@
 
 					// 온스→그램 환산: 1 oz = 31.1035 g
 					elUsdOz.textContent = `$${formatNumber(price, 2)}`;
-					const perGramUSD = price / 31.1035;
+					const perGramUSD = Math.round(price / 31.1035 * 100) / 100;
 					elUsdGram.textContent = `$${formatNumber(perGramUSD, 4)}`;
 
 					// 원화 환산 및 표기
@@ -107,10 +115,9 @@
 					const perGramKRW = perGramUSD * fx.rate;
 					elKrwPerGram.textContent = `₩${formatNumber(perGramKRW, 0)}`;
 
-					// KRX 원/g(가정): 국제 원/g에 프리미엄 11.5% 적용
-					const krxPerGram = perGramKRW * (1 + krxPremiumRate);
 					// 프리미엄(원): KRX − 국제
-					const premiumAbsKRW = 175300;//krxPerGram - perGramKRW;
+					const inputElem = document.getElementById('krx-per-krw');
+					const premiumAbsKRW = inputElem ? inputElem.value : null;
 					// 프리미엄(%): (KRX − 국제) / 국제 × 100
 					const premiumPct = (premiumAbsKRW / perGramKRW) * 100 - 100;
 					elKrxPerKrw.textContent = `₩${formatNumber(premiumAbsKRW, 0)}`;
@@ -247,6 +254,18 @@
 
 				// 최종 폴백: 고정 예시 환율
 				return { rate: 1400, source: 'fallback' };
+			}
+
+			async function fetchExternalHtml(url) {
+				try {
+					const response = await fetch(url);
+					if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+					const html = await response.text();
+					return html;
+				} catch (err) {
+					console.error(err);
+					return null;
+				}
 			}
 
 			// 공통 fetch(JSON)
