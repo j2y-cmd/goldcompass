@@ -1,26 +1,33 @@
 <!DOCTYPE html>
+<!--
+	goldcompass 대시보드
+	- 목적: 국제 금시세($/oz)를 조회하여 그램 단위·원화 환산·KRX 프리미엄을 계산해 표시
+	- 주석: 주요 코드에 한글 설명을 추가해 이해를 돕습니다.
+-->
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>1oz 금시세 ($/oz)</title>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>1oz 금시세 ($/oz)</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-            color: #333;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
+		body {
+			font-family: Arial, sans-serif;
+			background-color: #f4f4f9;
+			color: #333;
+			margin: 0;
+			padding: 20px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+		}
 		.error { color: #c62828; }
 		/* 표 전체 셀 우측 정렬 (표 헤더/값을 깔끔하게 보기 위함) */
 		table td {
 			text-align: right;
+			font-size: 16px;
 		}
 
+		/* 두 번째 열은 왼쪽 정렬로 레이블을 정렬 */
 		table td:nth-child(2) {
 			text-align: left;
 		}
@@ -49,7 +56,11 @@
 				<td>/g</td>
 			</tr>
 			<tr>
-				<!-- KRX 프리미엄(원화 절대값): KRX 원/g − 국제 원/g -->				
+				<!--
+					KRX 프리미엄 입력필드
+					- 사용자가 KRX에서 거래되는 원/g 가격을 직접 입력할 수 있음
+					- 입력값을 기반으로 절대 프리미엄(원)과 비율(%)을 계산하여 표시
+				-->
 				<td>
 					<input type="number" id="krx-per-krw" style="text-align: right;" />
 				</td>
@@ -72,7 +83,14 @@
 		<div id="source">소스: 자동 감지</div>
     </div>
 
-    <script>
+		<script>
+				/*
+					주요 동작 개요 (한글 주석)
+					1) 페이지 로드 시 금시세($/oz)와 환율(KRW/USD)을 병렬 조회
+					2) 온스→그램, 달러→원 환산을 수행하고 화면에 표시
+					3) 사용자가 KRX 원/g 값을 입력하면 프리미엄(절대값, 비율) 계산
+					4) 여러 공용 API에 순차적으로 접근하여 가용한 데이터를 우선 사용
+				*/
 		// 공개(무키) 소스 우선 순위
 		// 금: goldprice.org → metals.live → AllOrigins 프록시
 		// 환율: open.er-api.com → frankfurter.app → exchangerate.host → AllOrigins 프록시 → 고정값
@@ -115,19 +133,19 @@
 					const perGramKRW = perGramUSD * fx.rate;
 					elKrwPerGram.textContent = `₩${formatNumber(perGramKRW, 0)}`;
 
-					// 프리미엄(원): KRX − 국제
+					// 프리미엄(원): 사용자가 입력한 KRX 가격과 국제 원/g 차이
 					const inputElem = document.getElementById('krx-per-krw');
-					const premiumAbsKRW = inputElem ? inputElem.value : null;
+					const premiumAbsKRW = inputElem ? Number(inputElem.value) : 0;
 					// 프리미엄(%): (KRX − 국제) / 국제 × 100
-					const premiumPct = (premiumAbsKRW / perGramKRW) * 100 - 100;
+					const premiumPct = perGramKRW ? (premiumAbsKRW - perGramKRW) / perGramKRW * 100 : 0;
 					elKrxPerKrw.textContent = `₩${formatNumber(premiumAbsKRW, 0)}`;
 					elKrxBubble.textContent = `${formatNumber(premiumPct, 2)}%`;
 
-					// 메타 정보 표기
+					// 메타 정보 표기 (업데이트 시각 및 데이터 소스)
 					elUpdated.textContent = `${updatedAt ? new Date(updatedAt).toLocaleString() : '알 수 없음'}`;
 					elSource.textContent = `소스: ${source} + ${fx.source}`;
 				} catch (err) {
-					// 오류 시 간단 표기
+					// 오류 시 간단 표기(사용자에게 에러 상태를 전달)
 					elUsdOz.textContent = '표시 오류';
 					elUsdOz.classList.add('error');
 					elUsdGram.textContent = '표시 오류';
@@ -159,6 +177,7 @@
 			}
 
 			// 금 시세 $/oz 조회(무키): goldprice.org → metals.live → 프록시 → 폴백
+			// 한글 주석: 가능한 공개 API를 순차적으로 시도하여 금 시세를 가져옵니다.
 			async function fetchGoldOzUSD() {
 				// 시도 1: GoldPrice
 				try {
@@ -220,6 +239,7 @@
 			}
 
 			// 환율 KRW/USD 조회(무키): er-api → frankfurter → exchangerate.host → 프록시 → 고정값
+			// 한글 주석: 여러 환율 API를 순차 시도하여 신뢰 가능한 KRW 환율을 가져옵니다.
 			async function fetchKrwPerUsd() {
 				// 시도 1
 				try {
@@ -256,6 +276,7 @@
 				return { rate: 1400, source: 'fallback' };
 			}
 
+			// 외부 HTML을 가져오는 유틸 (디버깅/폴백 목적)
 			async function fetchExternalHtml(url) {
 				try {
 					const response = await fetch(url);
