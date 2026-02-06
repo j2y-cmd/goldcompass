@@ -1,308 +1,512 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <!--
-	goldcompass 대시보드
-	- 목적: 국제 금시세($/oz)를 조회하여 그램 단위·원화 환산·KRX 프리미엄을 계산해 표시
-	- 주석: 주요 코드에 한글 설명을 추가해 이해를 돕습니다.
+  goldcompass 참고용 페이지
+  - 목적: 국제 금 시세($/oz)와 환율을 조회해 g 단위·원화 환산, KRX 금 가격 대비 프리미엄 계산
+  - 주의: 주요 코드와 주석을 간단히 유지
 -->
 <html lang="ko">
-<head>
-		<meta charset="UTF-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0">
-		<title>1oz 금시세 ($/oz)</title>
-    <style>
-		body {
-			font-family: Arial, sans-serif;
-			background-color: #f4f4f9;
-			color: #333;
-			margin: 0;
-			padding: 20px;
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-		}
-		.error { color: #c62828; }
-		/* 표 전체 셀 우측 정렬 (표 헤더/값을 깔끔하게 보기 위함) */
-		table td {
-			text-align: right;
-			font-size: 16px;
-		}
 
-		/* 두 번째 열은 왼쪽 정렬로 레이블을 정렬 */
-		table td:nth-child(2) {
-			text-align: left;
-		}
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>1oz 금시세($/oz)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .error {
+            color: #c62828;
+        }
+
+        /* 숫자 셀을 기본 우측 정렬(단위/문자는 좌측 정렬) */
+        table td {
+            text-align: right;
+        }
+
+        /* 두 번째 열(단위)은 좌측 정렬 */
+        table td:nth-child(2) {
+            text-align: left;
+        }
+
+        /* 과거 시세 영역 스타일 */
+        .hist-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .hist-btn {
+            padding: 8px 16px;
+            border: 1px solid #ccc;
+            background: #fff;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .hist-btn:hover {
+            background: #eee;
+        }
+
+        .hist-btn.active {
+            background: #007bff;
+            color: #fff;
+            border-color: #0056b3;
+        }
+
+
+        /* 기간/날짜 */
+
+        .bull {
+            color: #d32f2f;
+            font-weight: bold;
+        }
+
+        /* 상승 (빨강) */
+        .bear {
+            color: #1976d2;
+            font-weight: bold;
+        }
+
+        /* 하락 (파랑) */
     </style>
+    <!-- Chart.js 라이브러리 추가 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
-    <div>
-		<!-- 표시 테이블: 각 행은 서로 다른 지표를 의미 -->
-		<table>
-			<tr>				
-				<td id="usd-oz">로딩 중...</td>
-				<td>/oz</td>
-			</tr>
-			<tr>				
-				<td id="usd-gram">로딩 중...</td>
-				<td>/g</td>
-			</tr>
-			<tr>
-				<!-- 환율 표기(원/달러) -->				
-				<td id="krw-per-usd">로딩 중...</td>
-				<td>/$</td>
-			</tr>
-			<tr>
-				<!-- 국제 금 1g 가격(원화 환산) -->				
-				<td id="krw-per-gram">로딩 중...</td>
-				<td>/g</td>
-			</tr>
-			<tr>
-				<!--
-					KRX 프리미엄 입력필드
-					- 사용자가 KRX에서 거래되는 원/g 가격을 직접 입력할 수 있음
-					- 입력값을 기반으로 절대 프리미엄(원)과 비율(%)을 계산하여 표시
-				-->
-				<td>
-					<input type="number" id="krx-per-krw" style="text-align: right;" />
-				</td>
-				<td>/g KRX</td>
-			</tr>
-			<tr>
-				<!-- 거품 비율(%): (KRX − 국제) / 국제 × 100 -->
-				<td>ratio</td>
-				<td id="krx-bubble">로딩 중...</td>
-			</tr>
-			<tr>
-				<!-- 데이터 최종 갱신 시각 -->
-				<td colspan="2" style="text-align: center;" id="updated-at">-</td>
-			</tr>
-		</table>
-		<div>
-			<button id="refresh">새로고침</button>
+    <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
+        <!-- 실시간 값 표시 테이블 -->
+        <table style="margin: 0 auto; border-spacing: 0 10px;">
+            <tr>
+                <td colspan="2" style="text-align: center; padding: 20px; font-size: 1.1em;">
+                    <span id="usd-oz">조회 중...</span><small>/oz</small>
+                    <span style="margin: 0 10px; font-weight: bold;">→</span>
+                    <span id="usd-gram"></span><small>/g</small> *
+                    <span id="krw-per-usd"></span><small>/$</small> =
+                    <strong id="krw-per-gram"></strong><small>/g</small>
+                    <span id="hist-diff" style="margin-left: 15px; font-size: 0.9em;"></span>
+                </td>
+            </tr>
+            <tr>
+                <!--
+                    KRX 금 1g 가격 입력
+                    - 사용자가 KRX에서 거래되는 금 1g 가격을 직접 입력
+                    - 입력값을 기준으로 프리미엄(거품 비율)을 계산
+                -->
+                <td style="padding-right: 10px;">
+                    <input type="number" id="krx-per-krw"
+                        style="text-align: right; padding: 5px; border: 1px solid #ccc; border-radius: 4px;" />
+                </td>
+                <td style="text-align: left;">/g KRX</td>
+            </tr>
+            <tr>
+                <!-- 거품 비율(%): (KRX 금 가격 - 국제 금 가격) / 국제 금 가격 × 100 -->
+                <td style="padding-right: 10px;">ratio</td>
+                <td id="krx-bubble" style="text-align: left; font-weight: bold;">로딩 중...</td>
+            </tr>
+        </table>
+
+        <!-- 과거 시세 조회 -->
+
+        <div
+            style="width: 100%; max-width: 800px; margin: 20px 0; background: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); min-height: 500px;">
+            <canvas id="goldChart"></canvas>
         </div>
-		<!-- 실제 사용된 데이터 소스 명시 -->
-		<div id="source">소스: 자동 감지</div>
+
+        <div class="hist-buttons">
+            <button class="hist-btn" data-days="1">1D</button>
+            <button class="hist-btn" data-months="1">1M</button>
+            <button class="hist-btn" data-months="3">3M</button>
+            <button class="hist-btn" data-months="6">6M</button>
+            <button class="hist-btn" data-months="12">1Y</button>
+        </div>
+
     </div>
 
-		<script>
-				/*
-					주요 동작 개요 (한글 주석)
-					1) 페이지 로드 시 금시세($/oz)와 환율(KRW/USD)을 병렬 조회
-					2) 온스→그램, 달러→원 환산을 수행하고 화면에 표시
-					3) 사용자가 KRX 원/g 값을 입력하면 프리미엄(절대값, 비율) 계산
-					4) 여러 공용 API에 순차적으로 접근하여 가용한 데이터를 우선 사용
-				*/
-		// 공개(무키) 소스 우선 순위
-		// 금: goldprice.org → metals.live → AllOrigins 프록시
-		// 환율: open.er-api.com → frankfurter.app → exchangerate.host → AllOrigins 프록시 → 고정값
+    <script>
+        /*
+            Gold Compass 앱 로직 (리팩토링 버전)
+        */
+        const GoldApp = {
+            OZ_TO_GRAM: 31.1035,
+            KRX_FALLBACK: { "2026-02-06": 231530, "2026-02-05": 235440, "2026-02-04": 243520, "2026-02-03": 236090, "2026-02-02": 227700, "2026-01-30": 253000, "2026-01-29": 269810, "2026-01-28": 251640, "2026-01-27": 243650, "2026-01-26": 238000, "2026-01-23": 234100, "2026-01-22": 229700, "2026-01-21": 231000, "2026-01-20": 224700, "2026-01-19": 221930, "2026-01-16": 218720, "2026-01-15": 218580, "2026-01-14": 220460, "2026-01-13": 217850, "2026-01-12": 216200, "2026-01-09": 210240, "2026-01-08": 207500, "2026-01-07": 209280, "2026-01-06": 211280, "2026-01-05": 211250, "2026-01-02": 208800, "2025-12-30": 206190, "2025-12-29": 208910, "2025-12-26": 213540, "2025-12-24": 216720, "2025-12-23": 215640, "2025-12-22": 210570, "2025-12-19": 206780, "2025-12-18": 207000, "2025-12-17": 207140, "2025-12-16": 204490, "2025-12-15": 206340, "2025-12-12": 203390, "2025-12-11": 200150, "2025-12-10": 200180, "2025-12-09": 199390, "2025-12-08": 200700, "2025-12-05": 200980, "2025-12-04": 199530, "2025-12-03": 200110, "2025-12-02": 200370, "2025-12-01": 200880, "2025-11-28": 198890, "2025-11-27": 196800, "2025-11-26": 196700, "2025-11-25": 197300, "2025-11-24": 193450, "2025-11-21": 192500, "2025-11-20": 193800, "2025-11-19": 194350, "2025-11-18": 190800, "2025-11-17": 193470, "2025-11-14": 199980, "2025-11-13": 204830, "2025-11-12": 200370, "2025-11-11": 199230, "2025-11-10": 195680, "2025-11-07": 194680, "2025-11-06": 191990, "2025-11-05": 189770, "2025-11-04": 189990, "2025-11-03": 188040, "2025-10-31": 188750, "2025-10-30": 183600, "2025-10-29": 185850, "2025-10-28": 182830, "2025-10-27": 189170, "2025-10-24": 194590, "2025-10-23": 197860, "2025-10-22": 197490, "2025-10-21": 208920, "2025-10-20": 210000, "2025-10-17": 222000, "2025-10-16": 218020, "2025-10-15": 227000, "2025-10-14": 219900, "2025-10-13": 209660, "2025-10-10": 199730, "2025-10-02": 187300, "2025-10-01": 191310, "2025-09-30": 194850, "2025-09-29": 185390, "2025-09-26": 179800, "2025-09-25": 177500, "2025-09-24": 177960, "2025-09-23": 175300, "2025-09-22": 171500, "2025-09-19": 168200, "2025-09-18": 169020, "2025-09-17": 171400, "2025-09-16": 169000, "2025-09-15": 166600, "2025-09-12": 165100, "2025-09-11": 165680, "2025-09-10": 165110, "2025-09-09": 167740, "2025-09-08": 161690, "2025-09-05": 159430, "2025-09-04": 158870, "2025-09-03": 158840, "2025-09-02": 157180, "2025-09-01": 156840, "2025-08-29": 152860, "2025-08-28": 151920, "2025-08-27": 152090, "2025-08-26": 151680, "2025-08-25": 150400, "2025-08-22": 149390, "2025-08-21": 150260, "2025-08-20": 149870, "2025-08-19": 149680, "2025-08-18": 149670, "2025-08-14": 149800, "2025-08-13": 149250, "2025-08-12": 149550, "2025-08-11": 150810, "2025-08-08": 153190, "2025-08-07": 150840, "2025-08-06": 150930, "2025-08-05": 150570, "2025-08-04": 149610, "2025-08-01": 148540, "2025-07-31": 147560, "2025-07-30": 147910, "2025-07-29": 148490, "2025-07-28": 148370, "2025-07-25": 148690, "2025-07-24": 148510, "2025-07-23": 151810, "2025-07-22": 150900, "2025-07-21": 150400, "2025-07-18": 149500, "2025-07-17": 149350, "2025-07-16": 149070, "2025-07-15": 149270, "2025-07-14": 149410, "2025-07-11": 148200, "2025-07-10": 147150, "2025-07-09": 145830, "2025-07-08": 147180, "2025-07-07": 146190, "2025-07-04": 146960, "2025-07-03": 147540, "2025-07-02": 146220, "2025-07-01": 145640, "2025-06-30": 143290, "2025-06-27": 144400, "2025-06-26": 145990, "2025-06-25": 146440, "2025-06-24": 146020, "2025-06-23": 149750, "2025-06-20": 147970, "2025-06-19": 149000, "2025-06-18": 148980, "2025-06-17": 148720, "2025-06-16": 149710, "2025-06-13": 150530, "2025-06-12": 147090, "2025-06-11": 147320, "2025-06-10": 146200, "2025-06-09": 145220, "2025-06-05": 147310, "2025-06-04": 147830, "2025-06-02": 147400, "2025-05-30": 146350, "2025-05-29": 145190, "2025-05-28": 146270, "2025-05-27": 146600, "2025-05-26": 147000, "2025-05-23": 147360, "2025-05-22": 148100, "2025-05-21": 147960, "2025-05-20": 144400, "2025-05-19": 145500, "2025-05-16": 144440, "2025-05-15": 141790, "2025-05-14": 147720, "2025-05-13": 148410, "2025-05-12": 148460, "2025-05-09": 149940, "2025-05-08": 150480, "2025-05-07": 152880, "2025-05-02": 148270, "2025-04-30": 151800, "2025-04-29": 153310, "2025-04-28": 152790, "2025-04-25": 152940, "2025-04-24": 153700, "2025-04-23": 152380, "2025-04-22": 159390, "2025-04-21": 154820, "2025-04-18": 152260, "2025-04-17": 152050, "2025-04-16": 151030, "2025-04-15": 148250, "2025-04-14": 148400, "2025-04-11": 149080, "2025-04-10": 146500, "2025-04-09": 144600, "2025-04-08": 142850, "2025-04-07": 142400, "2025-04-04": 143990, "2025-04-03": 148000, "2025-04-02": 147380, "2025-04-01": 149390, "2025-03-31": 149000, "2025-03-28": 145550, "2025-03-27": 143420, "2025-03-26": 142910, "2025-03-25": 142940, "2025-03-24": 143260, "2025-03-21": 143630, "2025-03-20": 144230, "2025-03-19": 143510, "2025-03-18": 142330, "2025-03-17": 140480, "2025-03-14": 141000, "2025-03-13": 139510, "2025-03-12": 138690, "2025-03-11": 138670, "2025-03-10": 139880, "2025-03-07": 139800, "2025-03-06": 143740, "2025-03-05": 144600, "2025-03-04": 142740, "2025-02-28": 139030, "2025-02-27": 138310, "2025-02-26": 141520, "2025-02-25": 145830, "2025-02-24": 145940, "2025-02-21": 146570, "2025-02-20": 146510, "2025-02-19": 149850, "2025-02-18": 153090, "2025-02-17": 158000, "2025-02-14": 163530, "2025-02-13": 161990, "2025-02-12": 158870, "2025-02-11": 159410, "2025-02-10": 152800, "2025-02-07": 145600, "2025-02-06": 146100, "2025-02-05": 147820, "2025-02-04": 141350, "2025-02-03": 138000, "2025-01-31": 133200, "2025-01-24": 130350, "2025-01-23": 129970, "2025-01-22": 130080, "2025-01-21": 129240, "2025-01-20": 128700, "2025-01-17": 128920, "2025-01-16": 128770, "2025-01-15": 129210, "2025-01-14": 129730, "2025-01-13": 130580, "2025-01-10": 129210, "2025-01-09": 128380, "2025-01-08": 127490, "2025-01-07": 127250, "2025-01-06": 128590, "2025-01-03": 128850, "2025-01-02": 128790, "2024-12-30": 127850, "2024-12-27": 126610, "2024-12-26": 125130, "2024-12-24": 123890, "2024-12-23": 123450, "2024-12-20": 122650, "2024-12-19": 121950, "2024-12-18": 122410, "2024-12-17": 123400, "2024-12-16": 123410, "2024-12-13": 124500, "2024-12-12": 125560, "2024-12-11": 124820, "2024-12-10": 123380, "2024-12-09": 122780, "2024-12-06": 121540, "2024-12-05": 121350, "2024-12-04": 120820, "2024-12-03": 120000, "2024-12-02": 119310, "2024-11-29": 119990, "2024-11-28": 118880, "2024-11-27": 119430, "2024-11-26": 119220, "2024-11-25": 121140, "2024-11-22": 121930, "2024-11-21": 120630, "2024-11-20": 119910, "2024-11-19": 118520, "2024-11-18": 116700, "2024-11-15": 115860, "2024-11-14": 115600, "2024-11-13": 118290, "2024-11-12": 117530, "2024-11-11": 119740, "2024-11-08": 121220, "2024-11-07": 120130, "2024-11-06": 124260, "2024-11-05": 122610, "2024-11-04": 122030, "2024-11-01": 124650, "2024-10-31": 127590, "2024-10-30": 129050, "2024-10-29": 128800, "2024-10-28": 129190, "2024-10-25": 128200, "2024-10-24": 129100, "2024-10-23": 130050, "2024-10-22": 126080, "2024-10-21": 123250, "2024-10-18": 120700, "2024-10-17": 118520, "2024-10-16": 117500, "2024-10-15": 116290, "2024-10-14": 116220, "2024-10-11": 115000, "2024-10-10": 114190, "2024-10-08": 115080, "2024-10-07": 114830, "2024-10-04": 114340, "2024-10-02": 112500, "2024-09-30": 111980, "2024-09-27": 113440, "2024-09-26": 114000, "2024-09-25": 114120, "2024-09-24": 113110, "2024-09-23": 113300, "2024-09-20": 111430, "2024-09-19": 110420, "2024-09-13": 109750, "2024-09-12": 108650, "2024-09-11": 108750, "2024-09-10": 108390, "2024-09-09": 107860, "2024-09-06": 108110, "2024-09-05": 108100, "2024-09-04": 108200, "2024-09-03": 108420, "2024-09-02": 108390, "2024-08-30": 108420, "2024-08-29": 108550, "2024-08-28": 108400, "2024-08-27": 108220, "2024-08-26": 107980, "2024-08-23": 108340, "2024-08-22": 108600, "2024-08-21": 109040, "2024-08-20": 108330, "2024-08-19": 108180, "2024-08-16": 108020, "2024-08-14": 108980, "2024-08-13": 109480, "2024-08-12": 108800, "2024-08-09": 107970, "2024-08-08": 108930, "2024-08-07": 108610, "2024-08-06": 109050, "2024-08-05": 109010, "2024-08-02": 109800, "2024-08-01": 107790, "2024-07-31": 107380, "2024-07-30": 106600, "2024-07-29": 106780, "2024-07-26": 106060, "2024-07-25": 106160, "2024-07-24": 108000, "2024-07-23": 107020, "2024-07-22": 107740, "2024-07-19": 108140, "2024-07-18": 109910, "2024-07-17": 109770, "2024-07-16": 108670, "2024-07-15": 107320, "2024-07-12": 106700, "2024-07-11": 105810, "2024-07-10": 105690, "2024-07-09": 105560, "2024-07-08": 105950, "2024-07-05": 105150, "2024-07-04": 104990, "2024-07-03": 104550, "2024-07-02": 104320, "2024-07-01": 103620, "2024-06-28": 103410, "2024-06-27": 103020, "2024-06-26": 103760, "2024-06-25": 104190, "2024-06-24": 104210, "2024-06-21": 105440, "2024-06-20": 104420, "2024-06-19": 103730, "2024-06-18": 103400, "2024-06-17": 103320, "2024-06-14": 102610, "2024-06-13": 102440, "2024-06-12": 102840, "2024-06-11": 102430, "2024-06-10": 102270, "2024-06-07": 104380, "2024-06-05": 103270, "2024-06-04": 104040, "2024-06-03": 103090, "2024-05-31": 104500, "2024-05-30": 103550, "2024-05-29": 103600, "2024-05-28": 103040, "2024-05-27": 103290, "2024-05-24": 103250, "2024-05-23": 104070, "2024-05-22": 106150, "2024-05-21": 106270, "2024-05-20": 106890, "2024-05-17": 104320, "2024-05-16": 103970, "2024-05-14": 103650, "2024-05-13": 104130, "2024-05-10": 104200, "2024-05-09": 102380, "2024-05-08": 102390, "2024-05-07": 102110, "2024-05-03": 101800, "2024-05-02": 103880, "2024-04-30": 104250, "2024-04-29": 104910, "2024-04-26": 105030, "2024-04-25": 103700, "2024-04-24": 103620, "2024-04-23": 103330, "2024-04-22": 107000, "2024-04-19": 108580, "2024-04-18": 107490, "2024-04-17": 109240, "2024-04-16": 110700, "2024-04-15": 107300, "2024-04-12": 106380, "2024-04-11": 103440, "2024-04-09": 103490, "2024-04-08": 102670, "2024-04-05": 99910, "2024-04-04": 100900, "2024-04-03": 104990, "2024-04-02": 101380, "2024-04-01": 99840, "2024-03-29": 98470, "2024-03-28": 95800, "2024-03-27": 94990, "2024-03-26": 94310, "2024-03-25": 94050, "2024-03-22": 93780, "2024-03-21": 94070, "2024-03-20": 93190, "2024-03-19": 93120, "2024-03-18": 92350, "2024-03-15": 92790, "2024-03-14": 92200, "2024-03-13": 91440, "2024-03-12": 91790, "2024-03-11": 91970, "2024-03-08": 91740, "2024-03-07": 92330, "2024-03-06": 91250, "2024-03-05": 90810, "2024-03-04": 89040, "2024-02-29": 87330, "2024-02-28": 87260, "2024-02-27": 87100, "2024-02-26": 87080, "2024-02-23": 86600, "2024-02-22": 86880, "2024-02-21": 87210, "2024-02-20": 86900, "2024-02-19": 86910, "2024-02-16": 86250, "2024-02-15": 86000, "2024-02-14": 86030, "2024-02-13": 86680, "2024-02-08": 87060, "2024-02-07": 87040, "2024-02-06": 86800, "2024-02-05": 87050, "2024-02-02": 87590, "2024-02-01": 87650, "2024-01-31": 87420, "2024-01-30": 87190, "2024-01-29": 87170, "2024-01-26": 86950, "2024-01-25": 86800, "2024-01-24": 87410, "2024-01-23": 87260, "2024-01-22": 87260, "2024-01-19": 87130, "2024-01-18": 86940, "2024-01-17": 87420, "2024-01-16": 87730, "2024-01-15": 87400, "2024-01-12": 86150, "2024-01-11": 86250, "2024-01-10": 86290, "2024-01-09": 86250, "2024-01-08": 86240, "2024-01-05": 86680, "2024-01-04": 86300, "2024-01-03": 86820, "2024-01-02": 86940, "2023-12-28": 86340, "2023-12-27": 86010, "2023-12-26": 85940, "2023-12-22": 85780, "2023-12-21": 85430, "2023-12-20": 85360, "2023-12-19": 85150, "2023-12-18": 84790 },
+            state: {
+                current: { price: 0, rate: 0, updatedAt: null, source: '' }
+            },
+            dom: {},
 
-        document.addEventListener('DOMContentLoaded', () => {
-			// DOM 요소 참조
-			const elUsdOz = document.getElementById('usd-oz');
-			const elUsdGram = document.getElementById('usd-gram');
-			const elKrwPerUsd = document.getElementById('krw-per-usd');
-			const elKrwPerGram = document.getElementById('krw-per-gram');
-			const elKrxPerKrw = document.getElementById('krx-per-krw');
-			const elKrxBubble = document.getElementById('krx-bubble');
-			const elUpdated = document.getElementById('updated-at');
-			const elSource = document.getElementById('source');
-			const btn = document.getElementById('refresh');
+            init() {
+                this.dom = {
+                    usdOz: document.getElementById('usd-oz'),
+                    usdGram: document.getElementById('usd-gram'),
+                    krwPerUsd: document.getElementById('krw-per-usd'),
+                    krwPerGram: document.getElementById('krw-per-gram'),
+                    krxPerKrw: document.getElementById('krx-per-krw'),
+                    krxBubble: document.getElementById('krx-bubble'),
+                    updatedAt: document.getElementById('updated-at'),
+                    source: document.getElementById('source'),
+                    histDiff: document.getElementById('hist-diff'),
+                    chartCanvas: document.getElementById('goldChart')
+                };
 
-			// KRX 프리미엄 가정치(부가세+수수료 등) 11.5%
-			const krxPremiumRate = 0.115;
+                this.goldChart = null;
 
-			btn.addEventListener('click', () => load());
-			load();
+                this.dom.krxPerKrw.addEventListener('input', () => this.updatePremium());
 
-			// 메인 로드 함수: 금/환율을 병렬로 불러와 계산 후 표에 반영
-			async function load() {
-				setLoading();
-				try {
-					// 1) $/oz, 2) KRW/USD 동시 조회
-					const [{ price, source, updatedAt }, fx] = await Promise.all([
-						fetchGoldOzUSD(),
-						fetchKrwPerUsd()
-					]);
+                document.querySelectorAll('.hist-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        document.querySelectorAll('.hist-btn').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
 
-					// 온스→그램 환산: 1 oz = 31.1035 g
-					elUsdOz.textContent = `$${formatNumber(price, 2)}`;
-					const perGramUSD = Math.round(price / 31.1035 * 100) / 100;
-					elUsdGram.textContent = `$${formatNumber(perGramUSD, 4)}`;
+                        const days = e.target.dataset.days;
+                        const months = e.target.dataset.months;
+                        this.loadHistory(days ? { days: parseInt(days) } : { months: parseInt(months) });
+                    });
+                });
 
-					// 원화 환산 및 표기
-					elKrwPerUsd.textContent = `₩${formatNumber(fx.rate, 2)}`;
-					const perGramKRW = perGramUSD * fx.rate;
-					elKrwPerGram.textContent = `₩${formatNumber(perGramKRW, 0)}`;
+                this.loadCurrent();
+            },
 
-					// 프리미엄(원): 사용자가 입력한 KRX 가격과 국제 원/g 차이
-					const inputElem = document.getElementById('krx-per-krw');
-					const premiumAbsKRW = inputElem ? Number(inputElem.value) : 0;
-					// 프리미엄(%): (KRX − 국제) / 국제 × 100
-					const premiumPct = perGramKRW ? (premiumAbsKRW - perGramKRW) / perGramKRW * 100 : 0;
-					elKrxPerKrw.textContent = `₩${formatNumber(premiumAbsKRW, 0)}`;
-					elKrxBubble.textContent = `${formatNumber(premiumPct, 2)}%`;
+            async loadCurrent() {
+                this.setLoading(true);
+                try {
+                    const [gold, fx] = await Promise.all([
+                        this.fetchGoldOzUSD(),
+                        this.fetchKrwPerUsd()
+                    ]);
 
-					// 메타 정보 표기 (업데이트 시각 및 데이터 소스)
-					elUpdated.textContent = `${updatedAt ? new Date(updatedAt).toLocaleString() : '알 수 없음'}`;
-					elSource.textContent = `소스: ${source} + ${fx.source}`;
-				} catch (err) {
-					// 오류 시 간단 표기(사용자에게 에러 상태를 전달)
-					elUsdOz.textContent = '표시 오류';
-					elUsdOz.classList.add('error');
-					elUsdGram.textContent = '표시 오류';
-					elKrwPerUsd.textContent = '표시 오류';
-					elKrwPerGram.textContent = '표시 오류';
-					elKrxPerKrw.textContent = '표시 오류';
-					elKrxBubble.textContent = '표시 오류';
-					elUpdated.textContent = '-';
-					elSource.textContent = `소스: 오류 (${err?.message || err})`;
-				}
-			}
+                    this.state.current = {
+                        price: gold.price,
+                        rate: fx.rate,
+                        updatedAt: gold.updatedAt,
+                        source: `${gold.source} + ${fx.source}`
+                    };
 
-			// 로딩 상태 초기화
-			function setLoading() {
-				elUsdOz.classList.remove('error');
-				elUsdOz.textContent = '로딩 중...';
-				elUsdGram.textContent = '로딩 중...';
-				elKrwPerUsd.textContent = '로딩 중...';
-				elKrwPerGram.textContent = '로딩 중...';
-				elKrxPerKrw.textContent = '로딩 중...';
-				elKrxBubble.textContent = '로딩 중...';
-				elUpdated.textContent = '-';
-				elSource.textContent = '소스: 자동 감지';
-			}
+                    this.updateMainUI();
+                } catch (err) {
+                    this.handleError(err);
+                }
+            },
 
-			// 숫자 서식 함수(소수점 자리수 제한)
-			function formatNumber(n, maxFrac) {
-				return Number(n).toLocaleString(undefined, { maximumFractionDigits: maxFrac });
-			}
+            updateMainUI() {
+                const { price, rate, updatedAt, source } = this.state.current;
+                const priceGramUSD = price / this.OZ_TO_GRAM;
+                const priceGramKRW = priceGramUSD * rate;
 
-			// 금 시세 $/oz 조회(무키): goldprice.org → metals.live → 프록시 → 폴백
-			// 한글 주석: 가능한 공개 API를 순차적으로 시도하여 금 시세를 가져옵니다.
-			async function fetchGoldOzUSD() {
-				// 시도 1: GoldPrice
-				try {
-					const url = 'https://data-asg.goldprice.org/dbXRates/USD';
-					const data = await fetchJson(url);
-					// 예상 구조: { items: [ { xauPrice: number, ts: number, ... } ] }
-					const items = data?.items || data?.Items || [];
-					const first = Array.isArray(items) ? items[0] : null;
-					const xau = first?.xauPrice || first?.xau || first?.xauUsd;
-					if (isFinite(xau)) {
-						return { price: Number(xau), source: 'goldprice.org', updatedAt: first?.ts || first?.tsj || Date.now() };
-					}
-					// CORS/구조 이슈 → 프록시
-					const proxied = await fetchJson('https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
-					const pItems = proxied?.items || proxied?.Items || [];
-					const pFirst = Array.isArray(pItems) ? pItems[0] : null;
-					const pXau = pFirst?.xauPrice || pFirst?.xau || pFirst?.xauUsd;
-					if (isFinite(pXau)) {
-						return { price: Number(pXau), source: 'goldprice.org (via AllOrigins)', updatedAt: pFirst?.ts || pFirst?.tsj || Date.now() };
-					}
-				} catch (_) { /* 다음 소스 */ }
+                this.dom.usdOz.textContent = `$${this.formatNumber(price, 2)}`;
+                this.dom.usdGram.textContent = `$${this.formatNumber(priceGramUSD, 4)}`;
+                this.dom.krwPerUsd.textContent = `₩${this.formatNumber(rate, 2)}`;
+                this.dom.krwPerGram.textContent = `₩${this.formatNumber(priceGramKRW, 0)}`;
 
-				// 시도 2: metals.live
-				try {
-					const url2 = 'https://api.metals.live/v1/spot/gold';
-					const data2 = await fetchJson(url2);
-					// 가능한 형식 1: [ { gold: 2400.12 }, ... ]
-					// 가능한 형식 2: [ [timestamp, 2400.12], ... ]
-					let price;
-					if (Array.isArray(data2) && data2.length > 0) {
-						const last = data2[data2.length - 1];
-						if (typeof last === 'object' && !Array.isArray(last)) {
-							price = last.gold || last.XAU || last.price;
-						} else if (Array.isArray(last)) {
-							price = last[1];
-						}
-					}
-					if (isFinite(price)) {
-						return { price: Number(price), source: 'metals.live', updatedAt: Date.now() };
-					}
-					// CORS 차단 시 프록시 사용
-					const proxied2 = await fetchJson('https://api.allorigins.win/raw?url=' + encodeURIComponent(url2));
-					let price2;
-					if (Array.isArray(proxied2) && proxied2.length > 0) {
-						const last2 = proxied2[proxied2.length - 1];
-						if (typeof last2 === 'object' && !Array.isArray(last2)) {
-							price2 = last2.gold || last2.XAU || last2.price;
-						} else if (Array.isArray(last2)) {
-							price2 = last2[1];
-						}
-					}
-					if (isFinite(price2)) {
-						return { price: Number(price2), source: 'metals.live (via AllOrigins)', updatedAt: Date.now() };
-					}
-				} catch (_) { /* 다음 단계 */ }
+                this.dom.updatedAt.textContent = updatedAt ? new Date(updatedAt).toLocaleString() : '조회 실패';
+                this.dom.source.textContent = source;
 
-				// 최종 폴백: 고정 예시값
-				return { price: 2400, source: 'fallback', updatedAt: Date.now() };
-			}
+                this.updatePremium();
+            },
 
-			// 환율 KRW/USD 조회(무키): er-api → frankfurter → exchangerate.host → 프록시 → 고정값
-			// 한글 주석: 여러 환율 API를 순차 시도하여 신뢰 가능한 KRW 환율을 가져옵니다.
-			async function fetchKrwPerUsd() {
-				// 시도 1
-				try {
-					const url = 'https://open.er-api.com/v6/latest/USD';
-					const data = await fetchJson(url);
-					const rate = data?.rates?.KRW;
-					if (isFinite(rate)) return { rate: Number(rate), source: 'open.er-api.com' };
-				} catch (_) { /* 다음 소스 */ }
+            updatePremium() {
+                const krxPrice = Number(this.dom.krxPerKrw.value) || 0;
+                const currentPriceGramKRW = (this.state.current.price / this.OZ_TO_GRAM) * this.state.current.rate;
 
-				// 시도 2
-				try {
-					const url = 'https://api.frankfurter.app/latest?from=USD&to=KRW';
-					const data = await fetchJson(url);
-					const rate = data?.rates?.KRW;
-					if (isFinite(rate)) return { rate: Number(rate), source: 'frankfurter.app' };
-				} catch (_) { /* 다음 소스 */ }
+                if (currentPriceGramKRW > 0) {
+                    const premium = ((krxPrice - currentPriceGramKRW) / currentPriceGramKRW) * 100;
+                    this.dom.krxBubble.textContent = `${this.formatNumber(premium, 2)}%`;
+                }
+            },
 
-				// 시도 3
-				try {
-					const url = 'https://api.exchangerate.host/latest?base=USD&symbols=KRW';
-					const data = await fetchJson(url);
-					const rate = data?.rates?.KRW;
-					if (isFinite(rate)) return { rate: Number(rate), source: 'exchangerate.host' };
-					// 프록시 재시도
-					const proxiedText = await fetchText('https://api.allorigins.win/raw?url=' + encodeURIComponent(url));
-					try {
-						const proxied = JSON.parse(proxiedText);
-						const pRate = proxied?.rates?.KRW;
-						if (isFinite(pRate)) return { rate: Number(pRate), source: 'exchangerate.host (via AllOrigins)' };
-					} catch (_) { /* JSON 파싱 실패 */ }
-				} catch (_) { /* 폴백 */ }
+            async loadHistory(period) {
+                this.dom.histDiff.innerHTML = '<span style="color:#888; font-size: 0.8em;">조회 중...</span>';
 
-				// 최종 폴백: 고정 예시 환율
-				return { rate: 1400, source: 'fallback' };
-			}
+                try {
+                    const targetDate = new Date();
+                    if (period.days) targetDate.setDate(targetDate.getDate() - period.days);
+                    else targetDate.setMonth(targetDate.getMonth() - period.months);
 
-			// 외부 HTML을 가져오는 유틸 (디버깅/폴백 목적)
-			async function fetchExternalHtml(url) {
-				try {
-					const response = await fetch(url);
-					if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-					const html = await response.text();
-					return html;
-				} catch (err) {
-					console.error(err);
-					return null;
-				}
-			}
+                    if (targetDate.getDay() === 0) targetDate.setDate(targetDate.getDate() - 2);
+                    else if (targetDate.getDay() === 6) targetDate.setDate(targetDate.getDate() - 1);
 
-			// 공통 fetch(JSON)
-			async function fetchJson(url) {
-				const res = await fetch(url);
-				if (!res.ok) throw new Error('HTTP ' + res.status);
-				return await res.json();
-			}
+                    const dateStr = targetDate.toISOString().split('T')[0];
+                    const histFx = await this.fetchHistFx(dateStr);
+                    const histGold = await this.fetchHistGold(dateStr, histFx);
 
-			// 공통 fetch(Text)
-			async function fetchText(url) {
-				const res = await fetch(url);
-				if (!res.ok) throw new Error('HTTP ' + res.status);
-				return await res.text();
-			}
-		});
+                    if (!histGold || !histFx) throw new Error('데이터 없음');
+
+                    const currentPriceGramKRW = (this.state.current.price / this.OZ_TO_GRAM) * this.state.current.rate;
+                    const pastPriceGramKRW = (histGold.price / this.OZ_TO_GRAM) * histFx.krw;
+
+                    const diffPct = ((currentPriceGramKRW - pastPriceGramKRW) / pastPriceGramKRW) * 100;
+                    const diffWon = currentPriceGramKRW - pastPriceGramKRW;
+
+                    const diffClass = diffPct > 0 ? 'bull' : (diffPct < 0 ? 'bear' : '');
+                    const diffSign = diffPct > 0 ? '+' : '';
+                    const label = period.days ? `${period.days}D` : (period.months === 12 ? '1Y' : `${period.months}M`);
+
+                    this.dom.histDiff.innerHTML = `
+                        <span class="${diffClass}" style="font-weight: bold; background: #eee; padding: 2px 6px; border-radius: 4px;">
+                            ${diffSign}${this.formatNumber(diffWon, 0)}원 (${diffSign}${this.formatNumber(diffPct, 2)}%)
+                        </span>
+                        <small style="color:#888; margin-left:5px;">vs ${label}</small>
+                    `;
+
+                    this.updateChart(period);
+                } catch (err) {
+                    console.error(err);
+                    this.dom.histDiff.innerHTML = '<span style="color:red; font-size: 0.8em;">ERR</span>';
+                }
+            },
+
+            async updateChart(period) {
+                try {
+                    let labels = [], gPts = [], fPts = [], cKrwPts = [];
+
+                    // KRX 데이터 로드 (로컬 file:// 환경 대응)
+                    let krxMap = Object.assign({}, this.KRX_FALLBACK);
+                    try {
+                        const res = await fetch('krx_gold_history.csv');
+                        if (res.ok) {
+                            const csvText = await res.text();
+                            csvText.split('\n').forEach(line => {
+                                const [date, price] = line.split(',');
+                                if (date && price) krxMap[date.trim()] = Number(price);
+                            });
+                        }
+                    } catch (e) {
+                        // Silent fallback
+                    }
+
+                    if (period.days === 1) {
+                        // 1D: Yahoo Finance Intraday (GC=F)
+                        const yahooUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/GC=F?interval=5m&range=1d';
+                        const data = await this.fetchJson(yahooUrl);
+                        const result = data?.chart?.result?.[0];
+                        if (result?.timestamp && result?.indicators?.quote?.[0]?.close) {
+                            const ts = result.timestamp;
+                            const prices = result.indicators.quote[0].close;
+                            const currentFx = Number(this.dom.krwPerUsd.textContent.replace(/₩|,/g, '')) || 1400;
+
+                            ts.forEach((t, i) => {
+                                const price = prices[i];
+                                if (price !== null && price !== undefined) {
+                                    const dt = new Date(t * 1000);
+                                    labels.push(`${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`);
+                                    const usdOz = Number(price.toFixed(2));
+                                    gPts.push(usdOz);
+                                    cKrwPts.push(Number(((usdOz / this.OZ_TO_GRAM) * currentFx).toFixed(0)));
+                                }
+                            });
+                        }
+                    } else {
+                        // 일 단위 상동 로직 (NBP + Frankfurter)
+                        const end = new Date(); end.setDate(end.getDate() - 1);
+                        const start = new Date();
+                        if (period.days) start.setDate(start.getDate() - period.days - 1);
+                        else start.setMonth(start.getMonth() - period.months);
+
+                        const [goldData, fxData] = await Promise.all([
+                            this.fetchJson(`https://api.nbp.pl/api/cenyzlota/${start.toISOString().split('T')[0]}/${end.toISOString().split('T')[0]}?format=json`),
+                            this.fetchJson(`https://api.frankfurter.app/${start.toISOString().split('T')[0]}..${end.toISOString().split('T')[0]}?from=USD&to=KRW,PLN`)
+                        ]);
+
+                        if (Array.isArray(goldData) && fxData?.rates) {
+                            goldData.forEach(d => {
+                                const fx = fxData.rates[d.data];
+                                if (fx) {
+                                    labels.push(d.data.substring(2));
+                                    const gramUSD = d.cena / fx.PLN;
+                                    gPts.push(Number((gramUSD * this.OZ_TO_GRAM).toFixed(2))); // USD/oz
+                                    cKrwPts.push(Number((gramUSD * fx.KRW).toFixed(0))); // KRW/g (환산가)
+
+                                    // KRX 데이터 매칭 (시차 보정: KRX에 하루를 더함 = 오늘 차트 지점에 어제 KRX 데이터를 표시)
+                                    const dObj = new Date(d.data);
+                                    dObj.setDate(dObj.getDate() - 1);
+                                    const prevDateStr = dObj.toISOString().split('T')[0];
+                                    fPts.push(krxMap[prevDateStr] || null);
+                                }
+                            });
+                        }
+                    }
+
+                    const datasets = [
+                        { label: '국제 금 ($/oz)', data: gPts, yAxisID: 'yG', borderColor: '#d4af37', backgroundColor: 'rgba(212,175,55,0.1)', fill: true, tension: 0.3, pointRadius: 0, borderWidth: 1 },
+                        { label: '국제 환산 (₩/g)', data: cKrwPts, yAxisID: 'yK', borderColor: '#9e9e9e', borderDash: [5, 5], fill: false, tension: 0.3, pointRadius: 0 }
+                    ];
+
+                    // 1D가 아니고 데이터가 있는 경우에만 KRX 데이터셋 추가
+                    if (period.days !== 1 && fPts.some(v => v !== null)) {
+                        datasets.push({ label: 'KRX 금 (₩/g)', data: fPts, yAxisID: 'yK', borderColor: '#f44336', fill: false, tension: 0.3, pointRadius: 0, spanGaps: true });
+                    }
+
+                    // Y축 동기화 및 범위 계산 (KRX 데이터 포함하여 짤림 방지)
+                    const gEntries = gPts.filter(v => v !== null);
+                    const kEntries = cKrwPts.filter(v => v !== null);
+                    const fEntries = fPts.filter(v => v !== null);
+
+                    const gMin = gEntries.length ? Math.min(...gEntries) : 2000;
+                    const gMax = gEntries.length ? Math.max(...gEntries) : 3000;
+
+                    // 환산 비율 (1 oz당 원화 가격)
+                    const ratio = kEntries[0] && gEntries[0] ? (kEntries[0] / gEntries[0]) : (this.state.current.rate / this.OZ_TO_GRAM);
+
+                    // 모든 원화 데이터(국제환산 + KRX)를 포함하는 범위 계산
+                    const allK = [...kEntries, ...fEntries];
+                    const kMin = allK.length ? Math.min(...allK) : 80000;
+                    const kMax = allK.length ? Math.max(...allK) : 150000;
+
+                    // 상하단 여백 및 깔끔한 눈금(5,000단위) 계산
+                    const kPaddedMin = Math.floor((kMin * 0.98) / 5000) * 5000;
+                    const kPaddedMax = Math.ceil((kMax * 1.02) / 5000) * 5000;
+
+                    if (this.goldChart) this.goldChart.destroy();
+                    this.goldChart = new Chart(this.dom.chartCanvas.getContext('2d'), {
+                        type: 'line',
+                        data: { labels, datasets },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            interaction: { mode: 'index', intersect: false },
+                            plugins: { legend: { display: false } },
+                            scales: {
+                                x: { ticks: { maxTicksLimit: 12 } },
+                                yG: {
+                                    position: 'left',
+                                    title: { display: true, text: '국제 금 ($/oz)', color: '#d4af37' },
+                                    ticks: { color: '#d4af37', precision: 0 },
+                                    min: kPaddedMin / ratio,
+                                    max: kPaddedMax / ratio
+                                },
+                                yK: {
+                                    display: true,
+                                    position: 'right',
+                                    title: { display: true, text: '원화 가격 (₩/g)', color: '#666' },
+                                    ticks: { color: '#666', precision: 0 },
+                                    grid: { drawOnChartArea: false },
+                                    min: kPaddedMin,
+                                    max: kPaddedMax
+                                }
+                            }
+                        }
+                    });
+                } catch (e) {
+                    console.error('Chart update failed', e);
+                }
+            },
+
+            async fetchGoldOzUSD() {
+                try {
+                    const url = 'https://data-asg.goldprice.org/dbXRates/USD';
+                    let data = await this.fetchJson(url);
+                    let items = data?.items || data?.Items || [];
+                    let first = items[0];
+                    if (!first) {
+                        data = await this.fetchJson(url, true);
+                        items = data?.items || data?.Items || [];
+                        first = items[0];
+                    }
+                    if (first) return { price: Number(first.xauPrice || first.xau), source: 'goldprice.org', updatedAt: first.ts || Date.now() };
+                } catch (e) { }
+
+                try {
+                    const url = 'https://api.metals.live/v1/spot/gold';
+                    const data = await this.fetchJson(url);
+                    const last = data[data.length - 1];
+                    const price = last?.gold || last?.[1];
+                    if (price) return { price: Number(price), source: 'metals.live', updatedAt: Date.now() };
+                } catch (e) { }
+
+                return { price: 2400, source: 'fallback', updatedAt: Date.now() };
+            },
+
+            async fetchKrwPerUsd() {
+                const sources = [
+                    { url: 'https://open.er-api.com/v6/latest/USD', key: 'KRW', name: 'open.er-api.com' },
+                    { url: 'https://api.frankfurter.app/latest?from=USD&to=KRW', key: 'KRW', name: 'frankfurter.app' }
+                ];
+                for (const s of sources) {
+                    try {
+                        const data = await this.fetchJson(s.url);
+                        if (data?.rates?.[s.key]) return { rate: data.rates[s.key], source: s.name };
+                    } catch (e) { }
+                }
+                return { rate: 1400, source: 'fallback' };
+            },
+
+            async fetchHistFx(dateStr) {
+                try {
+                    const data = await this.fetchJson(`https://api.frankfurter.app/${dateStr}?from=USD&to=KRW,PLN`);
+                    return { krw: data.rates.KRW, pln: data.rates.PLN };
+                } catch (e) { return null; }
+            },
+
+            async fetchHistGold(dateStr, fxData) {
+                if (!fxData?.pln) return null;
+                let target = new Date(dateStr);
+                for (let i = 0; i < 7; i++) {
+                    const cur = target.toISOString().split('T')[0];
+                    try {
+                        const data = await this.fetchJson(`https://api.nbp.pl/api/cenyzlota/${cur}?format=json`);
+                        if (data?.[0]?.cena) return { price: (data[0].cena * this.OZ_TO_GRAM) / fxData.pln };
+                    } catch (e) { }
+                    target.setDate(target.getDate() - 1);
+                }
+                return null;
+            },
+
+            async fetchJson(url, useProxy = 0) {
+                const proxies = [
+                    url,
+                    `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+                    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+                    `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`
+                ];
+                const target = proxies[useProxy] || url;
+
+                try {
+                    const res = await fetch(target);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const text = await res.text();
+                    try {
+                        let data = JSON.parse(text);
+                        if (useProxy === 1 && typeof data.contents === 'string') data = JSON.parse(data.contents);
+                        return data;
+                    } catch (e) {
+                        throw new Error("Invalid JSON");
+                    }
+                } catch (err) {
+                    if (useProxy < proxies.length - 1) {
+                        return this.fetchJson(url, useProxy + 1);
+                    }
+                    throw err;
+                }
+            },
+            formatNumber(n, m) { return Number(n).toLocaleString(undefined, { maximumFractionDigits: m }); },
+            setLoading(isLoading) {
+                if (isLoading) {
+                    this.dom.usdOz.textContent = '조회 중...';
+                    this.dom.krxBubble.textContent = '-';
+                }
+            },
+            handleError(err) {
+                this.dom.usdOz.textContent = '오류';
+                this.dom.source.textContent = err.message;
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => GoldApp.init());
     </script>
+    <footer style="margin: 30px 0; text-align: center; font-size: 0.85em; color: #888; line-height: 1.6; width: 100%;">
+        <div id="updated-at">-</div>
+        <div id="source">자동 감지</div>
+    </footer>
 </body>
+
 </html>
