@@ -40,10 +40,7 @@
 
         /* 정보 카드 스타일 */
         .info-card {
-            background: #fff;
             padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
             text-align: center;
         }
 
@@ -62,9 +59,6 @@
             justify-content: center;
             align-items: center;
             gap: 10px;
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 8px;
         }
 
         .chart-container {
@@ -421,7 +415,14 @@
                                 yG: {
                                     position: 'left',
                                     title: { display: false },
-                                    ticks: { color: '#d4af37', precision: 0 },
+                                    ticks: {
+                                        color: '#d4af37',
+                                        precision: 0,
+                                        callback: function (value, index, values) {
+                                            if (index === 0 || index === values.length - 1) return null;
+                                            return value;
+                                        }
+                                    },
                                     min: kPaddedMin / ratio,
                                     max: kPaddedMax / ratio
                                 },
