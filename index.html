@@ -97,21 +97,21 @@
                 </td>
             </tr>
             <tr>
-                <!--
-                    KRX 금 1g 가격 입력
-                    - 사용자가 KRX에서 거래되는 금 1g 가격을 직접 입력
-                    - 입력값을 기준으로 프리미엄(거품 비율)을 계산
-                -->
-                <td style="padding-right: 10px;">
-                    <input type="number" id="krx-per-krw"
-                        style="text-align: right; padding: 5px; border: 1px solid #ccc; border-radius: 4px;" />
+                <td colspan="2" style="text-align: center; padding: 10px;">
+                    <div
+                        style="display: flex; justify-content: center; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <div>
+                            <input type="number" id="krx-per-krw" placeholder="KRX Gold"
+                                style="text-align: right; padding: 5px; border: 1px solid #ccc; border-radius: 4px; width: 80px;" />
+                            <small>/g KRX</small>
+                        </div>
+                        <div style="color: #666;">|</div>
+                        <div>
+                            <small>Ratio</small>
+                            <span id="krx-bubble" style="font-weight: bold; margin-left: 5px;">-</span>
+                        </div>
+                    </div>
                 </td>
-                <td style="text-align: left;">/g KRX</td>
-            </tr>
-            <tr>
-                <!-- 거품 비율(%): (KRX 금 가격 - 국제 금 가격) / 국제 금 가격 × 100 -->
-                <td style="padding-right: 10px;">ratio</td>
-                <td id="krx-bubble" style="text-align: left; font-weight: bold;">로딩 중...</td>
             </tr>
         </table>
 
