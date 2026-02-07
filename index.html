@@ -374,12 +374,12 @@
                         options: {
                             responsive: true, maintainAspectRatio: false,
                             interaction: { mode: 'index', intersect: false },
-                            plugins: { legend: { display: false } },
+                            plugins: { legend: { display: true } },
                             scales: {
                                 x: { ticks: { maxTicksLimit: 12 } },
                                 yG: {
                                     position: 'left',
-                                    title: { display: true, text: '국제 금 ($/oz)', color: '#d4af37' },
+                                    title: { display: false },
                                     ticks: { color: '#d4af37', precision: 0 },
                                     min: kPaddedMin / ratio,
                                     max: kPaddedMax / ratio
@@ -387,7 +387,7 @@
                                 yK: {
                                     display: true,
                                     position: 'right',
-                                    title: { display: true, text: '원화 가격 (₩/g)', color: '#666' },
+                                    title: { display: false },
                                     ticks: {
                                         color: '#666',
                                         callback: function (value) {
