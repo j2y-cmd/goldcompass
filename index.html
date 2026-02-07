@@ -388,7 +388,12 @@
                                     display: true,
                                     position: 'right',
                                     title: { display: true, text: '원화 가격 (₩/g)', color: '#666' },
-                                    ticks: { color: '#666', precision: 0 },
+                                    ticks: {
+                                        color: '#666',
+                                        callback: function (value) {
+                                            return (value / 1000) + 'K';
+                                        }
+                                    },
                                     grid: { drawOnChartArea: false },
                                     min: kPaddedMin,
                                     max: kPaddedMax
