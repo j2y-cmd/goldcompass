@@ -223,7 +223,7 @@
 
                 if (currentPriceGramKRW > 0 && krxPrice > 0) {
                     const ratio = (krxPrice / currentPriceGramKRW) * 100;
-                    this.dom.krxBubble.textContent = this.formatNumber(ratio, 2);
+                    this.dom.krxBubble.textContent = this.formatNumber(ratio, 2) + '%';
                 } else {
                     this.dom.krxBubble.textContent = '-';
                 }
