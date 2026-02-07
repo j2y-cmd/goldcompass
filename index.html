@@ -107,7 +107,6 @@
                         </div>
                         <div style="color: #666;">|</div>
                         <div>
-                            <small>Ratio</small>
                             <span id="krx-bubble" style="font-weight: bold; margin-left: 5px;">-</span>
                         </div>
                     </div>
@@ -222,9 +221,11 @@
                 const krxPrice = Number(this.dom.krxPerKrw.value) || 0;
                 const currentPriceGramKRW = (this.state.current.price / this.OZ_TO_GRAM) * this.state.current.rate;
 
-                if (currentPriceGramKRW > 0) {
-                    const premium = ((krxPrice - currentPriceGramKRW) / currentPriceGramKRW) * 100;
-                    this.dom.krxBubble.textContent = `${this.formatNumber(premium, 2)}%`;
+                if (currentPriceGramKRW > 0 && krxPrice > 0) {
+                    const ratio = (krxPrice / currentPriceGramKRW) * 100;
+                    this.dom.krxBubble.textContent = this.formatNumber(ratio, 2);
+                } else {
+                    this.dom.krxBubble.textContent = '-';
                 }
             },
 
