@@ -90,12 +90,10 @@
         <table style="margin: 0 auto; border-spacing: 0 10px;">
             <tr>
                 <td colspan="2" style="text-align: center; padding: 20px; font-size: 1.1em;">
-                    <span id="usd-oz">조회 중...</span><small>/oz</small>
-                    <span style="margin: 0 10px; font-weight: bold;">→</span>
-                    <span id="usd-gram"></span><small>/g</small> *
-                    <span id="krw-per-usd"></span><small>/$</small> =
+                    <span id="usd-oz">조회 중...</span><small>/oz</small>:
+                    <span id="krw-per-usd"></span><small>/$</small>:
                     <strong id="krw-per-gram"></strong><small>/g</small>
-                    <span id="hist-diff" style="margin-left: 15px; font-size: 0.9em;"></span>
+                    <span id="hist-diff" style="margin-left: 5px; font-size: 0.9em;"></span>
                 </td>
             </tr>
             <tr>
@@ -253,10 +251,9 @@
                     const label = period.days ? `${period.days}D` : (period.months === 12 ? '1Y' : `${period.months}M`);
 
                     this.dom.histDiff.innerHTML = `
-                        <span class="${diffClass}" style="font-weight: bold; background: #eee; padding: 2px 6px; border-radius: 4px;">
-                            ${diffSign}${this.formatNumber(diffWon, 0)}원 (${diffSign}${this.formatNumber(diffPct, 2)}%)
+                        <span class="${diffClass}" style="font-weight: bold;">
+                            (${diffSign}${this.formatNumber(diffPct, 2)}%)
                         </span>
-                        <small style="color:#888; margin-left:5px;">vs ${label}</small>
                     `;
 
                     this.updateChart(period);
