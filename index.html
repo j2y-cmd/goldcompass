@@ -202,10 +202,15 @@
                 const priceGramUSD = price / this.OZ_TO_GRAM;
                 const priceGramKRW = priceGramUSD * rate;
 
-                this.dom.usdOz.textContent = `$${this.formatNumber(price, 2)}`;
-                this.dom.usdGram.textContent = `$${this.formatNumber(priceGramUSD, 4)}`;
-                this.dom.krwPerUsd.textContent = `₩${this.formatNumber(rate, 2)}`;
-                this.dom.krwPerGram.textContent = `₩${this.formatNumber(priceGramKRW, 0)}`;
+                if (price && rate) {
+                    this.dom.usdOz.textContent = `$${this.formatNumber(price, 2)}`;
+                    this.dom.krwPerUsd.textContent = `₩${this.formatNumber(rate, 2)}`;
+                    this.dom.krwPerGram.textContent = `₩${this.formatNumber(priceGramKRW, 0)}`;
+                } else {
+                    this.dom.usdOz.textContent = 'Error';
+                    this.dom.krwPerUsd.textContent = '-';
+                    this.dom.krwPerGram.textContent = '-';
+                }
 
                 this.dom.updatedAt.textContent = updatedAt ? new Date(updatedAt).toLocaleString() : '조회 실패';
                 this.dom.source.textContent = source;
